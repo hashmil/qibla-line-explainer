@@ -1,6 +1,6 @@
 # Qibla Line explainer
 
-A 48-second film that shows how [Qibla Line](https://qiblaline.com) works: why a phone compass can't be trusted indoors, how the app lines a map up with a wall of your room, and the turn to face the Qibla. It plays on the qiblaline.com landing page. The app itself lives at [hashmil/qibla-line](https://github.com/hashmil/qibla-line).
+A 48-second film that shows how [Qibla Line](https://qiblaline.com) works: why a phone compass can't be trusted indoors, how the app lines a map up with a wall of your room, and the turn to face the Qibla. It plays on the qiblaline.com landing page. The app itself lives at [hashmil/qibla-line](https://github.com/hashmil/qibla-line). Created by [Hash Milhan](https://hashir.net).
 
 It is a single [HyperFrames](https://hyperframes.heygen.com) composition (`index.html`, 1920x1080, 30fps): one Three.js world with a scripted camera, holding an outlined living room, a real Jumeirah 1 villa and its neighbours drawn from OpenStreetMap footprints, and a Natural Earth globe. The phone shows real screen captures of the live app. Captions are part of the picture. Design tokens are in `frame.md` and come from the app's own `DESIGN.md`.
 
