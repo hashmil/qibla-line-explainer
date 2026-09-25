@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <title>Qibla Line: how to use it</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/map/coastlines-50m.js"></script>
+    <script src="assets/map/buildings.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.181.2/examples/jsm/"
+        }
+      }
+    </script>
+    <style>
+      @font-face { font-family: "Chivo"; font-weight: 400; src: url("assets/fonts/chivo-latin-400-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Chivo"; font-weight: 700; src: url("assets/fonts/chivo-latin-700-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Chivo Mono"; font-weight: 500; src: url("assets/fonts/chivo-mono-latin-500-normal.woff2") format("woff2"); }
+      :root { --night: #07090c; --panel: #12161c; --rule: #2a3038; --ink: #d8d2c4; --dim: #7c7f84; --amber: #ffb23e; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--night); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--night); color: var(--ink); font-family: "Chivo", sans-serif; }
+      #world { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      .clip { position: absolute; inset: 0; pointer-events: none; }
+      .mono { font-family: "Chivo Mono", monospace; font-weight: 500; }
+      /* Captions sit low and centred under the action: full width before the app arrives,
+         then centred on the right two-thirds where the 3D plays */
+      .cap-wrap { position: absolute; bottom: 62px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
+      .cap-wrap.right { left: 640px; }
+      .cap-step { font-size: 28px; color: var(--dim); letter-spacing: 0.02em; margin-bottom: 12px; }
+      .cap { font-weight: 700; font-size: 60px; line-height: 1.12; max-width: 1180px; }
+      .cap.big { font-size: 76px; }
+      .cap-note { font-size: 32px; color: var(--dim); margin-top: 12px; }
+      .cap-wrap, .tag3d, .readout, .credit { text-shadow: 0 0 3px #07090c, 0 0 10px #07090c, 0 0 22px #07090c, 0 0 40px #07090c; }
+      .shade { position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: linear-gradient(to top, rgba(7,9,12,.85), rgba(7,9,12,0)); }
+      .tag3d { position: absolute; left: 0; top: 0; font-size: 26px; color: var(--dim); white-space: nowrap; will-change: transform; }
+      .tag3d.wave { color: #ff5a47; }
+      .tag3d.wave::before { background: #ff5a47; }
+      .tag3d::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--dim); margin-right: 10px; vertical-align: middle; }
+      .phone { position: absolute; left: 120px; top: 107px; width: 400px; height: 866px; padding: 14px; border-radius: 58px; background: var(--panel); outline: 3px solid rgba(216,210,196,.35); outline-offset: -3px; }
+      .phone .screen { position: relative; width: 100%; height: 100%; border-radius: 44px; overflow: hidden; background: var(--night); }
+      .phone .screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+      .ripple { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 4px solid rgba(216,210,196,.9); opacity: 0; }
+      .left-panel { position: absolute; left: 0; top: 0; bottom: 0; width: 700px; background: linear-gradient(to right, var(--night) 88%, rgba(7,9,12,0)); }
+      .divider { position: absolute; left: 640px; top: 90px; bottom: 90px; width: 2px; background: var(--rule); }
+      .align-grid { position: absolute; left: 700px; top: 70px; width: 1160px; height: 780px;
+        background-image: linear-gradient(to right, rgba(216,210,196,.22) 2px, transparent 2px), linear-gradient(to bottom, rgba(216,210,196,.22) 2px, transparent 2px);
+        background-size: 96px 96px; background-position: 44px 42px; }
+      .lockup { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      .lockup svg { width: 300px; height: 300px; }
+      .lockup .name { font-weight: 700; font-size: 104px; margin-top: 36px; }
+      .lockup .dek { font-size: 42px; color: var(--dim); margin-top: 14px; }
+      .readout { position: absolute; left: 0; top: 0; text-align: right; }
+      .close { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px; }
+      .close .vignette { position: absolute; left: 50%; top: 50%; width: 1500px; height: 1500px; margin: -750px 0 0 -750px; border-radius: 50%; background: radial-gradient(circle, rgba(7,9,12,.92) 0%, rgba(7,9,12,.7) 40%, rgba(7,9,12,0) 72%); }
+      .close svg { width: 232px; height: 232px; flex: none; }
+      .close .name { font-weight: 700; font-size: 104px; line-height: 1; text-align: center; }
+      .close .url { font-size: 46px; color: var(--ink); text-align: center; }
+      .close .line { font-weight: 400; font-size: 34px; color: var(--dim); text-align: center; }
+      .credit { position: absolute; right: 40px; top: 30px; font-size: 20px; color: var(--dim); }
+      #pin { position: absolute; left: 0; top: 0; width: 88px; height: 120px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="48" data-width="1920" data-height="1080">
+      <canvas id="world" width="1920" height="1080" data-layout-allow-overflow=""></canvas>
+
+      <!-- 01 compass drift -->
+      <section id="c01" class="clip" data-start="0" data-duration="3.5" data-track-index="1">
+        <div class="shade"></div>
+        <div class="cap-wrap" id="c01-cap"><div class="cap big">Phone compasses drift indoors.</div><div class="cap-note" id="c01-note">Speakers, wiring and steel pull the needle off course.</div></div>
+        <div class="tag3d mono wave" id="tag-speaker">speaker</div>
+        <div class="tag3d mono wave" id="tag-beam">steel beam</div>
+        <div class="tag3d mono wave" id="tag-wiring">wiring</div>
+      </section>
+
+      <!-- 02 sure and wrong -->
+      <section id="c02" class="clip" data-start="3.5" data-duration="2.5" data-track-index="2">
+        <div class="shade"></div>
+        <div class="cap-wrap"><div class="cap big" id="c02-cap">It can look certain and still point the wrong way.</div></div>
+        <div class="tag3d mono" id="tag-qibla" style="color: var(--amber)">Qibla</div>
+      </section>
+
+      <!-- 03 the idea; the icon flies into the phone -->
+      <section id="c03" class="clip" data-start="6" data-duration="3.4" data-track-index="1">
+        <div class="lockup">
+          <svg viewBox="0 0 512 512" id="c03-icon">
+            <rect width="512" height="512" rx="110" fill="#07090c" stroke="#2a3038" stroke-width="6" />
+            <circle id="c03-ring" cx="256" cy="256" r="168" fill="none" stroke="#2a3038" stroke-width="6" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" transform="rotate(-90 256 256)" />
+            <path id="c03-ticks" d="M256 88v26M256 398v26M88 256h26M398 256h26" stroke="#7c7f84" stroke-width="6" stroke-linecap="round" />
+            <path id="c03-line" d="M196 326 290 197" stroke="#ffb23e" stroke-width="22" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+            <circle id="c03-dot" cx="196" cy="326" r="26" fill="#ffb23e" />
+            <rect id="c03-kaaba" x="300" y="128" width="46" height="46" fill="#07090c" stroke="#ffb23e" stroke-width="10" transform="rotate(45 323 151)" />
+          </svg>
+          <div class="name" id="c03-name">Qibla Line</div>
+          <div class="dek" id="c03-dek">Find the Qibla from your walls, not magnets.</div>
+        </div>
+      </section>
+
+      <!-- The app, left third, from here until the line leaves the room -->
+      <section id="cphone" class="clip" data-start="8.9" data-duration="27.9" data-track-index="3">
+        <div class="left-panel" id="left-panel"></div>
+        <div class="divider" id="divider"></div>
+        <div class="phone" id="phone">
+          <div class="screen" id="phone-screen">
+            <div class="ripple" id="ripple-place" style="left: 186px; top: 193px"></div>
+            <div class="ripple" id="ripple-lines" style="left: 186px; top: 764px"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 04 place -->
+      <section id="c04" class="clip" data-start="9.1" data-duration="2.2" data-track-index="1">
+        <div class="cap-wrap right" id="c04-cap"><div class="cap-step mono">1 · Place</div><div class="cap">Use your location, or pick a city.</div></div>
+      </section>
+
+      <!-- 05 where you are -->
+      <section id="c05" class="clip" data-start="11.2" data-duration="3.2" data-track-index="2">
+        <svg id="pin" viewBox="0 0 88 120"><path d="M44 4C21 4 4 21 4 43c0 32 40 73 40 73s40-41 40-73C84 21 67 4 44 4z" fill="#ffb23e" /><circle cx="44" cy="43" r="15" fill="#07090c" /></svg>
+        <div class="shade"></div>
+        <div class="cap-wrap right" id="c05-cap"><div class="cap">The map finds where you are.</div></div>
+        <div class="credit mono" id="c05-credit">Map and buildings © OpenStreetMap contributors</div>
+      </section>
+
+      <!-- 06 against a wall -->
+      <section id="c06" class="clip" data-start="15.8" data-duration="3.2" data-track-index="1">
+        <div class="shade"></div>
+        <div class="cap-wrap right" id="c06-cap"><div class="cap-step mono">2 · Line up</div><div class="cap">Lay the phone flat, top edge against a wall.</div></div>
+      </section>
+
+      <!-- 07 turn the dial -->
+      <section id="c07" class="clip" data-start="19" data-duration="4.8" data-track-index="2">
+        <div class="align-grid" id="c07-grid"></div>
+        <div class="shade"></div>
+        <div class="cap-wrap right" id="c07-cap"><div class="cap">Turn the dial until that wall lines up with the grid.</div></div>
+      </section>
+
+      <!-- 08 it lines up -->
+      <section id="c08" class="clip" data-start="23.8" data-duration="2.3" data-track-index="1">
+        <div class="shade"></div>
+        <div class="cap-wrap right" id="c08-cap"><div class="cap">Tap “It lines up”. Now the map matches your room.</div></div>
+      </section>
+
+      <!-- 09 pick it up -->
+      <section id="c09" class="clip" data-start="26.1" data-duration="3" data-track-index="2">
+        <div class="shade"></div>
+        <div class="cap-wrap right" id="c09-cap"><div class="cap-step mono">3 · Face</div><div class="cap">Pick it up, hold it flat and turn on the spot.</div></div>
+      </section>
+
+      <!-- 10 turning -->
+      <section id="c10" class="clip" data-start="29.1" data-duration="4.4" data-track-index="1">
+        <div class="shade"></div>
+        <div class="cap-wrap right" id="c10-cap"><div class="cap big" id="c10-count">Turn left 38°</div><div class="cap-note">Uses the gyroscope, not the compass.</div></div>
+      </section>
+
+      <!-- 11 facing -->
+      <section id="c11" class="clip" data-start="33.4" data-duration="2.6" data-track-index="2">
+        <div class="shade"></div>
+        <div class="cap-wrap right" id="c11-cap"><div class="cap big" style="color: var(--amber)">Facing the Qibla</div></div>
+      </section>
+
+      <!-- 13 to makkah -->
+      <section id="c13" class="clip" data-start="38" data-duration="6.5" data-track-index="1">
+        <div class="tag3d mono" id="tag-home" style="color: var(--ink)">Jumeirah, Dubai</div>
+        <div class="readout" id="c13-readout">
+          <div class="cap" style="font-size: 64px">Makkah</div>
+          <div class="mono" style="font-size: 44px; margin-top: 8px">258.2° · <span id="c13-km">1,629</span> km</div>
+        </div>
+        <div class="credit mono" id="c13-credit">Coastlines: Natural Earth · Buildings: OpenStreetMap</div>
+      </section>
+
+      <!-- 14 close -->
+      <section id="c14" class="clip" data-start="44.5" data-duration="3.5" data-track-index="2">
+        <div class="close" id="c14-lockup">
+          <div class="vignette" id="c14-vignette"></div>
+          <svg viewBox="0 0 512 512" id="c14-icon">
+            <rect width="512" height="512" rx="110" fill="#07090c" stroke="#2a3038" stroke-width="6" />
+            <circle cx="256" cy="256" r="168" fill="none" stroke="#2a3038" stroke-width="6" />
+            <path d="M256 88v26M256 398v26M88 256h26M398 256h26" stroke="#7c7f84" stroke-width="6" stroke-linecap="round" />
+            <path d="M196 326 290 197" stroke="#ffb23e" stroke-width="22" stroke-linecap="round" />
+            <circle cx="196" cy="326" r="26" fill="#ffb23e" />
+            <rect x="300" y="128" width="46" height="46" fill="#07090c" stroke="#ffb23e" stroke-width="10" transform="rotate(45 323 151)" />
+          </svg>
+          <div class="name" id="c14-name">Qibla Line</div>
+          <div class="url mono" id="c14-url">qiblaline.com</div>
+          <div class="line" id="c14-line">Add it to your Home Screen.</div>
+        </div>
+      </section>
+
+      <!-- Sound: ambient pad, ElevenLabs effects, clock-winding ratchet tracks (one click per degree) -->
+      <audio id="bed" src="assets/audio/ambient-bed.mp3" data-start="0" data-duration="48" data-track-index="10" data-volume="0.9"></audio>
+      <audio id="sfx-hum" src="assets/sfx-el/hum.mp3" data-start="0.45" data-duration="4" data-track-index="14" data-volume="0.5"></audio>
+      <audio id="sfx-needle-1" src="assets/sfx-el/tick.mp3" data-start="0.8" data-duration="0.48" data-track-index="11" data-volume="0.35"></audio>
+      <audio id="sfx-needle-2" src="assets/sfx-el/tick.mp3" data-start="1.55" data-duration="0.48" data-track-index="12" data-volume="0.3"></audio>
+      <audio id="sfx-needle-3" src="assets/sfx-el/tick.mp3" data-start="2.35" data-duration="0.48" data-track-index="11" data-volume="0.35"></audio>
+      <audio id="sfx-thud" src="assets/sfx-el/thud.mp3" data-start="3.85" data-duration="1" data-track-index="12" data-volume="0.6"></audio>
+      <audio id="sfx-converge" src="assets/sfx-el/converge.mp3" data-start="6.0" data-duration="1.48" data-track-index="11" data-volume="0.55"></audio>
+      <audio id="sfx-tap-place" src="assets/sfx-el/tap.mp3" data-start="10.4" data-duration="0.48" data-track-index="12" data-volume="0.7"></audio>
+      <audio id="sfx-map" src="assets/sfx-el/whoosh.mp3" data-start="10.85" data-duration="1.2" data-track-index="11" data-volume="0.4"></audio>
+      <audio id="sfx-pin" src="assets/sfx-el/pop.mp3" data-start="11.85" data-duration="0.48" data-track-index="12" data-volume="0.6"></audio>
+      <audio id="sfx-descend" src="assets/sfx-el/whoosh.mp3" data-start="14.4" data-duration="1.2" data-track-index="11" data-volume="0.4"></audio>
+      <audio id="sfx-snap" src="assets/sfx-el/tap.mp3" data-start="17.55" data-duration="0.48" data-track-index="12" data-volume="0.55"></audio>
+      <audio id="sfx-ticks-dial" src="assets/audio/ticks-dial.wav" data-start="19.5" data-duration="3.7" data-track-index="13" data-volume="0.6"></audio>
+      <audio id="sfx-tap-lines" src="assets/sfx-el/tap.mp3" data-start="24.4" data-duration="0.48" data-track-index="11" data-volume="0.7"></audio>
+      <audio id="sfx-pickup" src="assets/sfx-el/whoosh.mp3" data-start="26.1" data-duration="1.2" data-track-index="12" data-volume="0.3"></audio>
+      <audio id="sfx-ticks-face" src="assets/audio/ticks-face.wav" data-start="29.1" data-duration="4.5" data-track-index="13" data-volume="0.6"></audio>
+      <audio id="sfx-chime" src="assets/sfx-el/chime.mp3" data-start="33.45" data-duration="3" data-track-index="11" data-volume="0.6"></audio>
+      <audio id="sfx-through" src="assets/sfx-el/whoosh.mp3" data-start="36.0" data-duration="1.2" data-track-index="12" data-volume="0.5"></audio>
+      <audio id="sfx-flight" src="assets/sfx-el/flight.mp3" data-start="37.1" data-duration="4.48" data-track-index="11" data-volume="0.45"></audio>
+      <audio id="sfx-arrive" src="assets/sfx-el/arrive.mp3" data-start="41.55" data-duration="2" data-track-index="12" data-volume="0.5"></audio>
+    </div>
+
+    <script type="module">
+      import * as THREE from "three";
+      import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+      import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+      import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+
+      const W = 1920, H = 1080;
+      const INK = 0xd8d2c4, DIM = 0x7c7f84, RULE = 0x2a3038, AMBER = 0xffb23e, NIGHT = 0x07090c, PANEL = 0x12161c;
+      const deg = Math.PI / 180;
+      const clamp01 = (x) => Math.min(1, Math.max(0, x));
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const smooth = (t) => t * t * (3 - 2 * t);
+      const inOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+      const out3 = (t) => 1 - Math.pow(1 - t, 3);
+      const expOut = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+      const seg = (t, a, b) => clamp01((t - a) / (b - a));
+      const window4 = (t, a, b, c, d) => Math.min(seg(t, a, b), 1 - seg(t, c, d));
+
+      // ---------- Real place and numbers ----------
+      // Jumeirah 1 villa (OpenStreetMap way 1113620831). Its walls run at 27.1° / 117.1°;
+      // with the phone's top edge against the 297.1° wall, the Qibla is 38.9° to the left.
+      const HOME = [55.253439, 25.207811], KAABA = [39.826206, 21.422487];
+      const WALL_NORMAL = 297.1;
+      const rad = (d) => d * deg;
+      const QIBLA = (Math.atan2(Math.sin(rad(KAABA[0] - HOME[0])) * Math.cos(rad(KAABA[1])), Math.cos(rad(HOME[1])) * Math.sin(rad(KAABA[1])) - Math.sin(rad(HOME[1])) * Math.cos(rad(KAABA[1])) * Math.cos(rad(KAABA[0] - HOME[0]))) / deg + 360) % 360;
+
+      // Continuous turns; the tick tracks (scripts/tick-tracks.py) use the same curves and times
+      const DIAL = [35, 19.5, 23.0], FACE = [38, 29.1, 33.4];
+      const remaining = ([total, a, b], t) => total * (1 - inOut(seg(t, a, b)));
+      const shownDegree = (off) => Math.max(0, Math.ceil(off - 0.25));
+      // 1 while the app sits in the left third and the 3D is framed on the right two-thirds
+      const phoneLayout = (t) => inOut(seg(t, 9.3, 10.5)) * (1 - inOut(seg(t, 36.0, 37.2)));
+
+      // ---------- Phone screens: one real capture per state and per degree ----------
+      const screenEl = document.getElementById("phone-screen");
+      const addShot = (name) => { const i = document.createElement("img"); i.src = `assets/screens-jpg/${name}.jpg`; i.alt = ""; screenEl.insertBefore(i, screenEl.firstChild); return i; };
+      const shots = { place: addShot("place"), dial: [], face: [] };
+      for (let d = 0; d <= 35; d++) shots.dial[d] = addShot(`dial-${String(d).padStart(2, "0")}`);
+      for (let d = 0; d <= 38; d++) shots.face[d] = addShot(`face-${String(d).padStart(2, "0")}`);
+      function screenLayers(t) {
+        if (t < 10.75) return [[shots.place, 1]];
+        if (t < 11.05) { const a = seg(t, 10.75, 11.05); return [[shots.place, 1 - a], [shots.dial[35], a]]; }
+        if (t < 26.1) return [[shots.dial[shownDegree(remaining(DIAL, t))], 1]];
+        if (t < 26.45) { const a = seg(t, 26.1, 26.45); return [[shots.dial[0], 1 - a], [shots.face[38], a]]; }
+        return [[shots.face[shownDegree(remaining(FACE, t))], 1]];
+      }
+      let shownLayers = [];
+      function paintScreen(t) {
+        for (const [img] of shownLayers) img.style.opacity = "0";
+        shownLayers = screenLayers(t);
+        for (const [img, a] of shownLayers) img.style.opacity = String(a);
+      }
+
+      // ---------- Assets ----------
+      const loadImage = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+      const [mapImg, dialStartImg, dialEndImg] = await Promise.all(["assets/map/villa-z18.png", "assets/screens-sm/dial-35.jpg", "assets/screens-sm/dial-00.jpg"].map(loadImage));
+      await Promise.all([...document.querySelectorAll("img")].map((img) => img.decode().catch(() => {})));
+      await document.fonts.ready;
+      const tex = (img) => { const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.needsUpdate = true; return t; };
+
+      // ---------- Renderer ----------
+      const canvas = document.getElementById("world");
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: true });
+      renderer.setPixelRatio(1);
+      renderer.setSize(W, H, false);
+      renderer.setClearColor(NIGHT, 1);
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(40, W / H, 0.05, 5000);
+      scene.add(camera);
+      const mat = (color, width, opacity = 1, extra = {}) => { const m = new LineMaterial({ color, linewidth: width, transparent: true, opacity, depthWrite: false, ...extra }); m.resolution.set(W, H); return m; };
+      const lines = (pairs, material) => { const g = new LineSegmentsGeometry(); g.setPositions(pairs.flat(2)); const l = new LineSegments2(g, material); l.computeLineDistances(); return l; };
+      const P = (x, y, z) => [x, y, z];
+      const box = (x0, y0, z0, x1, y1, z1) => {
+        const c = [P(x0,y0,z0),P(x1,y0,z0),P(x1,y0,z1),P(x0,y0,z1),P(x0,y1,z0),P(x1,y1,z0),P(x1,y1,z1),P(x0,y1,z1)];
+        return [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]].map(([a,b]) => [c[a], c[b]]);
+      };
+      const poly = (pts, closed = true) => pts.map((p, i) => (i < pts.length - 1 ? [p, pts[i + 1]] : closed ? [p, pts[0]] : null)).filter(Boolean);
+      const circle = (cx, cy, cz, r, n = 64) => poly(Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2; return P(cx + Math.cos(a) * r, cy + Math.sin(a) * r, cz); }));
+
+      // ---------- Orientation: the room's back wall (-z) faces WALL_NORMAL ----------
+      const northPhi = Math.PI + WALL_NORMAL * deg; // a bearing b points along phi = northPhi - b
+      const dirOfBearing = (b) => new THREE.Vector3(Math.sin(northPhi - b * deg), 0, Math.cos(northPhi - b * deg));
+      const NORTH = dirOfBearing(0), EAST = dirOfBearing(90);
+      const QIBLA_DIR = dirOfBearing(QIBLA);
+      const qiblaPhi = Math.atan2(QIBLA_DIR.x, QIBLA_DIR.z);
+      const enu = (e, n, y = 0) => EAST.clone().multiplyScalar(e).add(NORTH.clone().multiplyScalar(n)).setY(y);
+
+      // ---------- Room (metres), inside the villa, walls parallel to the villa's walls ----------
+      const room = new THREE.Group();
+      scene.add(room);
+      const roomMat = mat(INK, 2.2, 0.72), upperMat = mat(INK, 2.2, 0.72), floorGridMat = mat(RULE, 1.6, 1);
+      const WALL_H = 2.7;
+      room.add(lines([
+        ...poly([P(-2.5,0,2), P(-2.5,0,-2), P(2.5,0,-2), P(2.5,0,2)], false),
+        [P(-2.5,0,-2), P(-2.5,WALL_H,-2)], [P(2.5,0,-2), P(2.5,WALL_H,-2)],
+        ...poly([P(-1.6,1.0,-2), P(-0.5,1.0,-2), P(-0.5,2.1,-2), P(-1.6,2.1,-2)]), [P(-1.05,1.0,-2), P(-1.05,2.1,-2)], [P(-1.6,1.55,-2), P(-0.5,1.55,-2)],
+        ...poly([P(-1.5,0.2,-1.97), P(-0.6,0.2,-1.97), P(-0.6,0.6,-1.97), P(-1.5,0.6,-1.97)]),
+        ...Array.from({ length: 8 }, (_, i) => [P(-1.4 + i * 0.1, 0.2, -1.97), P(-1.4 + i * 0.1, 0.6, -1.97)]),
+        ...box(0.3, 0, -2, 1.5, 0.42, -1.2), ...box(0.3, 0.42, -2, 1.5, 0.85, -1.78),
+        ...box(1.7, 0, -1.98, 2.35, 0.55, -1.5),
+        ...poly([P(2.5,0,0.2), P(2.5,2.05,0.2), P(2.5,2.05,1.1), P(2.5,0,1.1)], false),
+        ...box(-2.4, 0, -1.9, -2.0, 1.1, -1.5), ...circle(-2.2, 0.75, -1.49, 0.07, 24), ...circle(-2.2, 0.4, -1.49, 0.11, 28),
+        ...poly([P(2.49,0.3,-1.0), P(2.49,0.42,-1.0), P(2.49,0.42,-0.8), P(2.49,0.3,-0.8)]),
+        ...poly([P(-1.3,0.005,-1.0), P(1.1,0.005,-1.0), P(1.1,0.005,0.9), P(-1.3,0.005,0.9)]),
+      ], roomMat));
+      room.add(lines([
+        [P(-2.5,WALL_H,-2), P(2.5,WALL_H,-2)], [P(-2.5,WALL_H,-2), P(-2.5,WALL_H,2)], [P(2.5,WALL_H,-2), P(2.5,WALL_H,2)],
+        [P(0.5,2.55,-0.6), P(2.5,2.55,-0.6)], [P(0.5,2.55,-0.35), P(2.5,2.55,-0.35)], [P(0.5,2.45,-0.6), P(2.5,2.45,-0.6)], [P(0.5,2.45,-0.35), P(2.5,2.45,-0.35)],
+        ...poly([P(0.5,2.45,-0.6), P(0.5,2.55,-0.6), P(0.5,2.55,-0.35), P(0.5,2.45,-0.35)]),
+      ], upperMat));
+      const gridPairs = [];
+      for (let x = -2; x <= 2.01; x += 0.5) gridPairs.push([P(x, 0.002, -2), P(x, 0.002, 2)]);
+      for (let z = -1.5; z <= 2.01; z += 0.5) gridPairs.push([P(-2.5, 0.002, z), P(2.5, 0.002, z)]);
+      room.add(lines(gridPairs, floorGridMat));
+      const matGroup = new THREE.Group();
+      matGroup.add(lines([...poly([P(-0.35,0.01,-0.6), P(0.35,0.01,-0.6), P(0.35,0.01,0.6), P(-0.35,0.01,0.6)]), [P(-0.35,0.01,-0.48), P(0.35,0.01,-0.48)], [P(-0.35,0.01,0.48), P(0.35,0.01,0.48)]], roomMat));
+      matGroup.position.set(-0.4, 0, 0.2);
+      matGroup.rotation.y = qiblaPhi - Math.PI;
+      room.add(matGroup);
+
+      // ---------- Compass (01-02) ----------
+      const compass = new THREE.Group();
+      compass.position.set(0.55, 1.2, 0.35);
+      compass.add(lines([...circle(0, 0, 0, 0.26, 72), ...circle(0, 0, 0, 0.225, 72)], mat(INK, 2.6, 0.95)));
+      const needle = new THREE.Group();
+      const tri = (pts, color) => new THREE.Mesh(new THREE.BufferGeometry().setFromPoints(pts.map((p) => new THREE.Vector3(...p))), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+      needle.add(tri([[-0.03,0,0],[0.03,0,0],[0,0.2,0]], INK), tri([[0.03,0,0],[-0.03,0,0],[0,-0.2,0]], DIM));
+      compass.add(needle);
+      const compassFace = new THREE.Mesh(new THREE.CircleGeometry(0.255, 64), new THREE.MeshBasicMaterial({ color: NIGHT, transparent: true, opacity: 0.9 }));
+      compassFace.position.z = -0.002;
+      compass.add(compassFace);
+      room.add(compass);
+      const qiblaWallHit = compass.position.clone().add(QIBLA_DIR.clone().multiplyScalar((compass.position.z + 2) / -QIBLA_DIR.z));
+      const truthPts = new THREE.QuadraticBezierCurve3(compass.position.clone(), compass.position.clone().lerp(qiblaWallHit, 0.5).add(new THREE.Vector3(0, 0.45, 0)), qiblaWallHit).getPoints(60);
+      const truthMat = mat(AMBER, 3.4, 0.9, { dashed: true, dashSize: 0.09, gapSize: 0.07 });
+      const truth = lines(truthPts.slice(0, -1).map((p, i) => [p.toArray(), truthPts[i + 1].toArray()]), truthMat);
+      room.add(truth);
+
+      // ---------- Magnetic interference (01): rings radiate from each culprit and knock the needle ----------
+      const WAVE = 0xff5a47;
+      const V = (x, y, z) => new THREE.Vector3(x, y, z);
+      const ringPairs = circle(0, 0, 0, 1, 96);
+      const PERIOD = 1.1;
+      const waveSources = [
+        { p: V(-2.2, 0.6, -1.45), start: 0.55, outline: [...box(-2.4, 0, -1.9, -2.0, 1.1, -1.5), ...circle(-2.2, 0.75, -1.485, 0.07, 24), ...circle(-2.2, 0.4, -1.485, 0.11, 28)] },
+        { p: V(1.5, 2.45, -0.47), start: 1.3, outline: [[P(0.5,2.45,-0.6), P(2.5,2.45,-0.6)], [P(0.5,2.45,-0.35), P(2.5,2.45,-0.35)], [P(0.5,2.55,-0.6), P(2.5,2.55,-0.6)], [P(0.5,2.55,-0.35), P(2.5,2.55,-0.35)]] },
+        { p: V(2.45, 0.36, -0.9), start: 2.05, outline: [...poly([P(2.49,0.3,-1.0), P(2.49,0.42,-1.0), P(2.49,0.42,-0.8), P(2.49,0.3,-0.8)]), [P(2.49,0.42,-0.9), P(2.49,2.7,-0.9)], [P(2.49,2.7,-0.9), P(2.49,2.7,1.2)]] },
+      ];
+      for (const src of waveSources) {
+        src.reach = src.p.distanceTo(V(0.55, 1.2, 0.35)) + 0.35;
+        src.glowMat = mat(WAVE, 3, 0);
+        room.add(lines(src.outline, src.glowMat));
+        src.rings = [0, 1, 2].map((i) => {
+          const m = mat(WAVE, 2.6, 0);
+          const ring = lines(ringPairs, m);
+          ring.position.copy(src.p);
+          room.add(ring);
+          return { ring, m, i };
+        });
+      }
+      function paintWaves(t) {
+        let kick = 0;
+        for (const src of waveSources) {
+          const env = seg(t, src.start, src.start + 0.3) * (1 - seg(t, 3.9, 4.4));
+          src.glowMat.opacity = env * (0.75 + 0.25 * Math.sin((t - src.start) * 9));
+          for (const { ring, m, i } of src.rings) {
+            const phase = (t - src.start - (i * PERIOD) / 3) / PERIOD;
+            const frac = phase - Math.floor(phase);
+            const on = phase >= 0 && env > 0.001;
+            ring.visible = on;
+            if (!on) continue;
+            const radius = frac * src.reach;
+            ring.scale.setScalar(Math.max(0.01, radius));
+            ring.quaternion.copy(camera.quaternion);
+            m.opacity = env * Math.pow(1 - frac, 1.4) * 0.95;
+            // Each wave front shoves the needle as it passes the compass
+            kick += env * Math.exp(-(((radius - (src.reach - 0.35)) / 0.2) ** 2)) * 0.55 * (i % 2 ? 1 : -1);
+          }
+        }
+        return kick;
+      }
+
+      // ---------- Phone in the room: flat on the floor, top edge against the back wall ----------
+      const PHONE_W = 0.30, PHONE_H = 0.649;
+      function roundedRect(w, h, r) {
+        const s = new THREE.Shape(); const x = -w / 2, y = -h / 2;
+        s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r);
+        s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+        return s;
+      }
+      const phone3d = new THREE.Group();
+      const phoneBody = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(PHONE_W, PHONE_H, 0.045), 16), new THREE.MeshBasicMaterial({ color: PANEL, transparent: true }));
+      const phoneEdgeMat = mat(INK, 2.4, 0.6);
+      const phoneEdge = lines(poly(roundedRect(PHONE_W, PHONE_H, 0.045).getPoints(16).map((p) => P(p.x, p.y, 0.001))), phoneEdgeMat);
+      const dialStartTex = tex(dialStartImg), dialEndTex = tex(dialEndImg);
+      const screenMat = new THREE.MeshBasicMaterial({ map: dialStartTex, transparent: true, toneMapped: false });
+      const screen3d = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(PHONE_W - 0.02, PHONE_H - 0.02, 0.034), 16), screenMat);
+      { const uv = screen3d.geometry.attributes.uv, pos = screen3d.geometry.attributes.position; for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / (PHONE_W - 0.02) + 0.5, pos.getY(i) / (PHONE_H - 0.02) + 0.5); }
+      screen3d.position.z = 0.002;
+      phone3d.add(phoneBody, phoneEdge, screen3d);
+      scene.add(phone3d);
+      const PHONE_REST = new THREE.Vector3(-0.2, 0.006, -2 + PHONE_H / 2 + 0.004);
+      const snapMat = mat(INK, 4.5, 0);
+      const snapFlash = lines([[P(-0.55, 0.008, -1.994), P(0.15, 0.008, -1.994)]], snapMat);
+      scene.add(snapFlash);
+
+      // ---------- Qibla line on the floor ----------
+      const STAND = new THREE.Vector3(0.15, 0, 1.0);
+      const qLineGlow = lines([[STAND.toArray(), STAND.toArray()]], mat(AMBER, 16, 0.22));
+      const qLine = lines([[STAND.toArray(), STAND.toArray()]], mat(AMBER, 5, 1));
+      scene.add(qLineGlow, qLine);
+      function setQLine(length) {
+        const a = STAND.clone(); a.y = 0.01;
+        const b = a.clone().add(QIBLA_DIR.clone().multiplyScalar(Math.max(0.0001, length)));
+        for (const l of [qLine, qLineGlow]) { l.geometry.setPositions([...a.toArray(), ...b.toArray()]); l.computeLineDistances(); }
+      }
+
+      // ---------- Neighbourhood: OSM tiles (z18) plus the real building footprints as outlined 3D blocks ----------
+      const MAP_M = 2048 * (156543.03 * Math.cos(HOME[1] * deg) / 2 ** 18);
+      const mapMat = new THREE.MeshBasicMaterial({ map: tex(mapImg), transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+      const mapPlane = new THREE.Mesh(new THREE.PlaneGeometry(MAP_M, MAP_M), mapMat);
+      mapPlane.rotation.x = -Math.PI / 2;
+      const mapHolder = new THREE.Group();
+      mapHolder.add(mapPlane);
+      mapHolder.rotation.y = northPhi - Math.PI;
+      mapHolder.position.y = -0.03;
+      scene.add(mapHolder);
+      const blockMat = mat(INK, 1.6, 0), homeMat = mat(INK, 3.2, 0);
+      const blockPairs = [], homePairs = [];
+      for (const b of window.BUILDINGS) {
+        const target = b.id === 1113620831 ? homePairs : blockPairs;
+        for (let i = 0; i < b.ring.length - 1; i++) {
+          const [e0, n0] = b.ring[i], [e1, n1] = b.ring[i + 1];
+          target.push([enu(e0, n0, 0).toArray(), enu(e1, n1, 0).toArray()]);
+          target.push([enu(e0, n0, b.h).toArray(), enu(e1, n1, b.h).toArray()]);
+          target.push([enu(e0, n0, 0).toArray(), enu(e0, n0, b.h).toArray()]);
+        }
+      }
+      const blocks = lines(blockPairs, blockMat), homeBlock = lines(homePairs, homeMat);
+      scene.add(blocks, homeBlock);
+
+      // ---------- Globe ----------
+      const R = 60000;
+      const ecef = ([lon, lat]) => new THREE.Vector3(Math.cos(lat * deg) * Math.cos(lon * deg), Math.sin(lat * deg), -Math.cos(lat * deg) * Math.sin(lon * deg));
+      const uH = ecef(HOME);
+      const eH = new THREE.Vector3(0, 1, 0).cross(uH).normalize();
+      const nH = uH.clone().cross(eH).normalize();
+      const toWorld = (v, radius = R) => EAST.clone().multiplyScalar(v.dot(eH) * radius).add(new THREE.Vector3(0, v.dot(uH) * radius - R, 0)).add(NORTH.clone().multiplyScalar(v.dot(nH) * radius));
+      const globe = new THREE.Group();
+      scene.add(globe);
+      const occluder = new THREE.Mesh(new THREE.SphereGeometry(R * 0.997, 96, 64), new THREE.MeshBasicMaterial({ color: NIGHT, transparent: true, opacity: 0 }));
+      occluder.position.set(0, -R, 0);
+      globe.add(occluder);
+      const coastMat = mat(INK, 1.8, 0);
+      const coastPairs = [];
+      for (const run of window.COASTLINES) for (let i = 0; i < run.length - 1; i++) coastPairs.push([toWorld(ecef(run[i]), R * 1.0005).toArray(), toWorld(ecef(run[i + 1]), R * 1.0005).toArray()]);
+      globe.add(lines(coastPairs, coastMat));
+      const gratMat = mat(RULE, 1.4, 0);
+      const gratPairs = [];
+      for (let lat = -80; lat <= 80; lat += 10) for (let lon = -180; lon < 180; lon += 3) gratPairs.push([toWorld(ecef([lon, lat])).toArray(), toWorld(ecef([lon + 3, lat])).toArray()]);
+      for (let lon = -180; lon < 180; lon += 10) for (let lat = -84; lat < 84; lat += 3) gratPairs.push([toWorld(ecef([lon, lat])).toArray(), toWorld(ecef([lon, lat + 3])).toArray()]);
+      globe.add(lines(gratPairs, gratMat));
+      const vK = ecef(KAABA);
+      const omega = Math.acos(uH.dot(vK));
+      const DIST_KM = omega * 6371.0088;
+      const arcPts = Array.from({ length: 97 }, (_, i) => {
+        const f = i / 96, s1 = Math.sin((1 - f) * omega) / Math.sin(omega), s2 = Math.sin(f * omega) / Math.sin(omega);
+        return toWorld(uH.clone().multiplyScalar(s1).add(vK.clone().multiplyScalar(s2)).normalize(), R * 1.002);
+      });
+      const arcPairs = arcPts.slice(0, -1).map((p, i) => [p.toArray(), arcPts[i + 1].toArray()]);
+      const arcGlow = lines(arcPairs, mat(AMBER, 16, 0)), arc = lines(arcPairs, mat(AMBER, 5, 0));
+      globe.add(arcGlow, arc);
+      const kaabaPos = toWorld(vK, R * 1.002);
+      const kaabaMark = new THREE.Group();
+      kaabaMark.position.copy(kaabaPos);
+      kaabaMark.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), kaabaPos.clone().sub(new THREE.Vector3(0, -R, 0)).normalize());
+      const kaabaMat = mat(AMBER, 5, 0);
+      kaabaMark.add(lines(poly([P(0, 900, 0), P(900, 0, 0), P(0, -900, 0), P(-900, 0, 0)]), kaabaMat));
+      globe.add(kaabaMark);
+      const arcMid = arcPts[48].clone();
+      const arcMidUp = arcMid.clone().sub(new THREE.Vector3(0, -R, 0)).normalize();
+
+      // ---------- Camera ----------
+      const eye = (phi, pitch) => new THREE.Vector3(Math.sin(phi) * Math.cos(pitch), Math.sin(pitch), Math.cos(phi) * Math.cos(pitch));
+      const UP = new THREE.Vector3(0, 1, 0);
+      const EYE_H = 1.55;
+      const standEye = new THREE.Vector3(STAND.x, EYE_H, STAND.z);
+      const facePhi = (t) => qiblaPhi - remaining(FACE, t) * deg; // turning left raises phi; the Qibla starts 38° to the left
+      const planUp = (roll) => new THREE.Vector3(Math.sin(roll), 0, -Math.cos(roll));
+      const upFromPhi = (phi) => new THREE.Vector3(Math.sin(phi), 0, Math.cos(phi));
+      // The phone's map arrives at a map bearing of WALL_NORMAL + 35°, so the 3D map starts with that bearing at the top
+      const MAP_START_PHI = northPhi - (WALL_NORMAL + 35) * deg;
+      const DESCENT_TURN = ((((Math.PI - MAP_START_PHI) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI; // shortest turn to the back wall at the top
+      const SPOT = { x: -0.2, z: -1.35, alt: 2.4 };
+
+      function cameraAt(t) {
+        const pos = new THREE.Vector3(), look = new THREE.Vector3(); let up = UP.clone();
+        if (t < 9.5) {
+          const k = t < 6 ? 0 : inOut(seg(t, 6, 7.2));
+          const push = out3(seg(t, 0, 6));
+          pos.set(lerp(0.9, 0.55, push), lerp(1.62, 1.52, push) + 0.08 * k, lerp(5.6, 4.3, push) + 1.9 * k); look.set(lerp(-0.1, 0, push), 1.22, -2);
+        } else if (t < 14.2) {
+          // 04-05: top-down over Jumeirah, oriented like the phone's map, drifting down a little
+          pos.set(0, lerp(260, 190, inOut(seg(t, 10.8, 14.2))), 0.001); look.set(0, 0, 0); up = upFromPhi(MAP_START_PHI);
+        } else if (t < 19) {
+          // 05-06: descend into the villa, turning until its wall runs across the top, ending over the phone's spot
+          const k = inOut(seg(t, 14.2, 16.6));
+          const alt = Math.exp(lerp(Math.log(190), Math.log(SPOT.alt), k)) - 0.1 * seg(t, 16.6, 19);
+          const cx = lerp(0, SPOT.x, k), cz = lerp(0, SPOT.z, k);
+          pos.set(cx, alt, cz + 0.001); look.set(cx, 0, cz);
+          up = upFromPhi(MAP_START_PHI + DESCENT_TURN * k);
+        } else if (t < 26) {
+          // 07-08: plan view of the room; the room turns with the dial
+          const k = inOut(seg(t, 18.9, 19.9));
+          const roll = lerp(0, remaining(DIAL, t), k) * deg;
+          pos.set(lerp(SPOT.x, 0, k), lerp(SPOT.alt - 0.1, 8.6, k), lerp(SPOT.z, -0.3, k)); look.set(lerp(SPOT.x, 0, k), 0, lerp(SPOT.z, -0.3, k));
+          up = planUp(roll);
+        } else if (t < 36) {
+          // 09-11: drop to eye level, then turn smoothly onto the Qibla
+          const k = inOut(seg(t, 26, 27.6));
+          const phi = facePhi(t);
+          const eyePos = standEye.clone().add(new THREE.Vector3(-Math.sin(phi) * 0.9, 0, -Math.cos(phi) * 0.9));
+          pos.copy(new THREE.Vector3(0, 8.6, -0.3).lerp(eyePos, k));
+          look.copy(new THREE.Vector3(0, 0, -0.31).lerp(eyePos.clone().add(eye(phi, -0.16).multiplyScalar(4)), k));
+          up = planUp(0).lerp(UP, k).normalize();
+        } else if (t < 38) {
+          const k = inOut(seg(t, 36, 38));
+          const base = standEye.clone().add(QIBLA_DIR.clone().multiplyScalar(-0.9));
+          pos.copy(base.clone().add(QIBLA_DIR.clone().multiplyScalar(lerp(0, 6.5, k)))); pos.y = lerp(EYE_H, 2.2, k);
+          look.copy(pos.clone().add(eye(qiblaPhi, lerp(-0.16, -0.3, k)).multiplyScalar(4)));
+        } else {
+          const wallExit = standEye.clone().add(QIBLA_DIR.clone().multiplyScalar(5.6)).setY(2.2);
+          // Rise over the neighbourhood, a quick zoom through the empty middle heights, then settle on the globe
+          const alt = t < 39.3 ? Math.exp(lerp(Math.log(2.2), Math.log(700), inOut(seg(t, 38, 39.3))))
+            : t < 39.9 ? Math.exp(lerp(Math.log(700), Math.log(40000), smooth(seg(t, 39.3, 39.9))))
+            : Math.exp(lerp(Math.log(40000), Math.log(95000), out3(seg(t, 39.9, 44.2))));
+          const g = smooth(seg(t, 39.4, 41.4));
+          const groundTarget = wallExit.clone().setY(0).lerp(arcMid, g);
+          pos.copy(groundTarget.clone().add(UP.clone().lerp(arcMidUp, g).normalize().multiplyScalar(alt)));
+          // Look ahead along the line (rooftops on the horizon) as the climb starts, then tilt down to the map
+          const tilt = smooth(seg(t, 38.0, 39.0));
+          const ahead = pos.clone().add(QIBLA_DIR.clone().multiplyScalar(40)).setY(pos.y * 0.4);
+          look.copy(ahead.lerp(groundTarget, tilt));
+          const topUp = QIBLA_DIR.clone().lerp(NORTH, smooth(seg(t, 38.4, 41.5))).normalize();
+          up = UP.clone().lerp(topUp, tilt).normalize();
+        }
+        const lay = phoneLayout(t);
+        return { pos, look, up, offsetX: -320 * lay, offsetY: 60 * lay };
+      }
+
+      function applyCamera(cam) {
+        camera.fov = 40;
+        camera.up.copy(cam.up);
+        camera.position.copy(cam.pos);
+        camera.lookAt(cam.look);
+        camera.near = Math.max(0.02, cam.pos.y * 0.02);
+        camera.far = Math.max(400, cam.pos.length() * 4 + R * 2.5);
+        if (cam.offsetX || cam.offsetY) camera.setViewOffset(W, H, cam.offsetX, cam.offsetY, W, H); else camera.clearViewOffset();
+        camera.updateProjectionMatrix();
+      }
+
+      // ---------- Render one frame ----------
+      const tmp = new THREE.Vector3();
+      const toScreen = (v) => { tmp.copy(v).project(camera); return [(tmp.x * 0.5 + 0.5) * W, (-tmp.y * 0.5 + 0.5) * H]; };
+      const tags = ["speaker", "beam", "wiring", "qibla", "home"].reduce((o, id) => ((o[id] = document.getElementById(`tag-${id}`)), o), {});
+      const tagPoints = { speaker: P(-2.2, 1.2, -1.7), beam: P(1.6, 2.5, -0.47), wiring: P(2.49, 0.36, -0.9), qibla: qiblaWallHit.toArray() };
+      const readout = document.getElementById("c13-readout"), pin = document.getElementById("pin");
+      const countEl = document.getElementById("c10-count");
+
+      function renderAt(t) {
+        applyCamera(cameraAt(t));
+
+        const shrink = inOut(seg(t, 6.0, 7.2));
+        const roomVis = t < 7.2 ? 1 - smooth(seg(t, 6.6, 7.2)) : window4(t, 15.2, 15.9, 36.9, 37.6);
+        room.scale.setScalar(t < 7.2 ? lerp(1, 0.04, shrink) : 1);
+        room.position.set(t < 7.2 ? lerp(0, 0.55, shrink) : 0, t < 7.2 ? lerp(0, 1.2, shrink) : 0, t < 7.2 ? lerp(0, 0.35, shrink) : 0);
+        room.visible = roomVis > 0.001;
+        roomMat.opacity = 0.72 * roomVis;
+        floorGridMat.opacity = roomVis;
+        upperMat.opacity = 0.72 * roomVis * (t < 7.2 ? 1 : seg(t, 27.0, 27.8));
+
+        const kick = paintWaves(t);
+        const jitter = t < 3.5 ? Math.sin(t * 9.1) * 0.2 + Math.sin(t * 23.7) * 0.08 + kick * 2.2 : 0;
+        needle.rotation.z = t < 3.5 ? jitter + 0.4 : lerp(0.4, -1.2, out3(seg(t, 3.5, 3.95))) + kick * 0.6;
+        compass.visible = t < 7.2;
+        compass.lookAt(camera.position);
+        truth.visible = t >= 3.9 && t < 7.2;
+        truth.geometry.instanceCount = Math.max(1, Math.round(59 * out3(seg(t, 4.0, 5.1))));
+        truthMat.opacity = 0.9 * roomVis;
+
+        // Phone on the floor: slides in and settles top edge against the wall; picked up at 26
+        const phoneVis = window4(t, 15.7, 16.0, 26.0, 26.4);
+        const k = inOut(seg(t, 16.0, 17.6));
+        phone3d.position.copy(new THREE.Vector3(-0.7, 0.25, -0.9).lerp(PHONE_REST, k));
+        phone3d.rotation.set(-Math.PI / 2, 0, 0);
+        phone3d.rotateZ(lerp(40, 0, k) * deg);
+        screenMat.map = t < 23.0 ? dialStartTex : dialEndTex;
+        phone3d.visible = phoneVis > 0.001;
+        phoneBody.material.opacity = phoneVis; screenMat.opacity = phoneVis; phoneEdgeMat.opacity = 0.6 * phoneVis;
+        snapMat.opacity = window4(t, 17.55, 17.7, 18.3, 18.9);
+        snapFlash.visible = snapMat.opacity > 0.001;
+
+        const lineLen = out3(seg(t, 27.6, 28.6)) * 3.2 + expOut(seg(t, 36.0, 37.4)) * 60 + expOut(seg(t, 38.2, 39.6)) * 540;
+        const lineVis = t >= 27.6 && t < 40.2 ? 1 - seg(t, 39.6, 40.2) : 0;
+        setQLine(lineLen);
+        const breath = t >= 33.5 && t < 36 ? 0.5 + 0.5 * Math.sin((t - 33.5) * 2.4) : 0;
+        qLine.visible = qLineGlow.visible = lineVis > 0.001;
+        qLine.material.opacity = lineVis;
+        qLineGlow.material.opacity = (0.22 + 0.18 * breath) * lineVis;
+        qLine.material.linewidth = 5 + 1.5 * breath;
+
+        // Neighbourhood: in with the phone's map; the home villa stays bright longest; all out as the room forms
+        // ...and again from the moment the line leaves the room until the globe has taken over
+        const hood = Math.max(window4(t, 10.9, 11.5, 14.9, 15.5), window4(t, 36.9, 37.6, 39.35, 39.8) * 0.85);
+        // The raster only once the camera is high enough for it to be sharp; up close it's the outlined blocks alone
+        const mapSharp = seg(camera.position.y, 45, 160);
+        mapMat.opacity = 0.6 * hood * mapSharp; mapHolder.visible = mapMat.opacity > 0.001;
+        blockMat.opacity = 0.42 * hood; blocks.visible = hood > 0.001;
+        const homeVis = Math.max(window4(t, 10.9, 11.5, 15.2, 15.8), window4(t, 36.9, 37.6, 39.35, 39.8) * 0.85);
+        homeMat.opacity = 0.95 * homeVis; homeBlock.visible = homeVis > 0.001;
+
+        // Hold on Makkah ~41.7-44.1: readout stays up, globe stays calm, then the close lockup dims it well
+        // clear of the text (fully in by 45.4, before "no line crosses the text" needs to hold).
+        const globeVis = t >= 39.35 ? smooth(seg(t, 39.35, 39.9)) * (1 - 0.97 * smooth(seg(t, 44.5, 45.4))) : 0;
+        globe.visible = globeVis > 0.001;
+        occluder.material.opacity = globeVis;
+        coastMat.opacity = 0.8 * globeVis; gratMat.opacity = globeVis;
+        const arcK = out3(seg(t, 40.0, 41.6));
+        const arcBreath = t >= 41.8 ? 0.5 + 0.5 * Math.sin((t - 41.8) * 1.05) : 0;
+        arc.geometry.instanceCount = arcGlow.geometry.instanceCount = Math.max(1, Math.round(96 * arcK));
+        arc.material.opacity = (arcK > 0 ? 1 : 0) * globeVis; arcGlow.material.opacity = (arcK > 0 ? 0.25 + 0.08 * arcBreath : 0) * globeVis;
+        kaabaMat.opacity = seg(t, 41.5, 41.8) * globeVis;
+
+        renderer.render(scene, camera);
+
+        for (const [id, el] of Object.entries(tags)) {
+          const [x, y] = toScreen(id === "home" ? new THREE.Vector3(0, 0, 0) : room.localToWorld(new THREE.Vector3(...tagPoints[id])));
+          el.style.transform = `translate(${(x + 14).toFixed(1)}px, ${(y - 16).toFixed(1)}px)`;
+        }
+        const [px, py] = toScreen(new THREE.Vector3(0, 8, 0));
+        // left/top, not transform: the drop-in tween owns the pin's transform
+        pin.style.left = `${(px - 44).toFixed(1)}px`;
+        pin.style.top = `${(py - 116).toFixed(1)}px`;
+        const [kx, ky] = toScreen(kaabaPos);
+        readout.style.transform = `translate(${(kx - 60).toFixed(1)}px, ${(ky + 34).toFixed(1)}px) translateX(-100%)`;
+        paintScreen(t);
+        countEl.textContent = `Turn left ${Math.max(1, shownDegree(remaining(FACE, t)))}°`;
+      }
+
+      window.addEventListener("hf-seek", (event) => renderAt(event.detail.time));
+
+      // ---------- DOM timeline ----------
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#c01-cap", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.2);
+      tl.fromTo(["#tag-speaker", "#tag-beam", "#tag-wiring"], { opacity: 0 }, { opacity: 1, duration: 0.3, stagger: 0.75, ease: "power2.out" }, 0.6);
+      tl.fromTo("#c01-note", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 1.1);
+      tl.to(["#c01-cap", "#tag-speaker", "#tag-beam", "#tag-wiring"], { opacity: 0, duration: 0.3 }, 3.2);
+      tl.fromTo("#c02-cap", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 3.6);
+      tl.fromTo("#tag-qibla", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 5.0);
+      tl.to(["#c02-cap", "#tag-qibla"], { opacity: 0, duration: 0.35 }, 5.7);
+      // 03: icon draws on, then flies into the phone on the left
+      tl.fromTo("#c03-icon", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.8, ease: "power3.out" }, 6.7);
+      tl.fromTo("#c03-ring", { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.8, ease: "power2.inOut" }, 6.8);
+      tl.fromTo("#c03-ticks", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 7.1);
+      tl.fromTo("#c03-line", { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.5, ease: "power3.out" }, 7.2);
+      tl.fromTo(["#c03-dot", "#c03-kaaba"], { opacity: 0, scale: 0.4, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)", stagger: 0.12 }, 7.35);
+      tl.fromTo("#c03-name", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 7.4);
+      tl.fromTo("#c03-dek", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 7.6);
+      tl.to("#c03-name, #c03-dek", { opacity: 0, y: -10, duration: 0.35, ease: "power2.in" }, 8.45);
+      tl.to("#c03-icon", { x: -640, y: 110, scale: 0.3, duration: 0.6, ease: "power3.inOut" }, 8.6);
+      tl.to("#c03-icon", { opacity: 0, duration: 0.25 }, 8.95);
+      // The app arrives on the left and stays until the line leaves the room
+      tl.fromTo("#phone", { opacity: 0, y: 70, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }, 8.9);
+      tl.fromTo("#divider", { opacity: 0, scaleY: 0 }, { opacity: 1, scaleY: 1, duration: 0.8, ease: "power2.out" }, 9.6);
+      tl.fromTo("#left-panel", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 9.4);
+      tl.to("#phone, #divider", { opacity: 0, x: -80, duration: 0.5, ease: "power2.in" }, 36.0);
+      tl.to("#left-panel", { opacity: 0, duration: 0.6 }, 36.1);
+      // 04
+      tl.fromTo("#c04-cap", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 9.3);
+      tl.fromTo("#ripple-place", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.25, ease: "power2.out" }, 10.35);
+      tl.to("#ripple-place", { opacity: 0, scale: 1.5, duration: 0.45, ease: "power2.out" }, 10.6);
+      tl.to("#c04-cap", { opacity: 0, duration: 0.3 }, 11.0);
+      // 05
+      tl.fromTo("#pin", { opacity: 0, y: -120 }, { opacity: 1, y: 0, duration: 0.45, ease: "bounce.out" }, 11.7);
+      tl.fromTo("#c05-cap", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 11.5);
+      tl.fromTo("#c05-credit", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 11.3);
+      tl.to("#pin, #c05-cap, #c05-credit", { opacity: 0, duration: 0.35 }, 14.05);
+      // 06
+      tl.fromTo("#c06-cap", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 16.1);
+      tl.to("#c06-cap", { opacity: 0, duration: 0.3 }, 18.7);
+      // 07
+      tl.fromTo("#c07-cap", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 19.1);
+      tl.fromTo("#c07-grid", { opacity: 0 }, { opacity: 0.55, duration: 0.6 }, 19.3);
+      tl.to("#c07-grid", { opacity: 1, duration: 0.2, yoyo: true, repeat: 1 }, 23.0);
+      tl.to("#c07-cap", { opacity: 0, duration: 0.3 }, 23.5);
+      // 08
+      tl.fromTo("#ripple-lines", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.2, ease: "power2.out" }, 24.35);
+      tl.to("#ripple-lines", { opacity: 0, scale: 1.6, duration: 0.45 }, 24.55);
+      tl.fromTo("#c08-cap", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 24.0);
+      tl.to("#c08-cap", { opacity: 0, duration: 0.3 }, 25.8);
+      // 09
+      tl.fromTo("#c09-cap", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 26.3);
+      tl.to("#c09-cap", { opacity: 0, duration: 0.3 }, 28.8);
+      // 10-11
+      tl.fromTo("#c10-cap", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 29.1);
+      tl.to("#c10-cap", { opacity: 0, duration: 0.2 }, 33.2);
+      tl.fromTo("#c11-cap", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.4, ease: "power2.out" }, 33.45);
+      tl.to("#c11-cap", { opacity: 0, duration: 0.35 }, 35.7);
+      // 13
+      tl.fromTo("#tag-home", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 40.4);
+      tl.fromTo("#c13-readout", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 41.7);
+      const counter = { km: 0 };
+      const kmEl = document.getElementById("c13-km");
+      tl.fromTo(counter, { km: 0 }, { km: Math.round(DIST_KM), duration: 1.6, ease: "power3.out", onUpdate: () => { kmEl.textContent = Math.round(counter.km).toLocaleString("en-GB"); } }, 40.0);
+      tl.fromTo("#c13-credit", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 40.4);
+      // Hold on Makkah: readout is fully in by ~42.2, held calm for ~2s, then fades
+      tl.to("#tag-home, #c13-readout, #c13-credit", { opacity: 0, duration: 0.4 }, 44.1);
+      // 14: centred lockup, icon first, then name, url and line stagger up
+      tl.fromTo("#c14-vignette", { opacity: 0 }, { opacity: 1, duration: 0.9, ease: "power2.out" }, 44.5);
+      tl.fromTo("#c14-icon", { opacity: 0, scale: 0.7, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.65, ease: "power3.out" }, 44.55);
+      tl.fromTo("#c14-name", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 45.05);
+      tl.fromTo("#c14-url", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 45.45);
+      tl.fromTo("#c14-line", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 45.8);
+
+      renderAt(window.__hfThreeTime || 0);
+      window.__timelines["main"] = tl;
+      window.__hfForceTimelineRebind?.();
+    </script>
+  </body>
+</html>

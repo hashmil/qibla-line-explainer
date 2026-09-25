@@ -1,0 +1,22 @@
+node_modules/
+snapshots/
+renders/
+.tiles/
+.tiles18/
+.tiles18v/
+.thumbnails/
+.hyperframes/
+# Full-resolution captures; scripts/capture-screens.mjs regenerates them
+assets/screens/
+.DS_Store
+
+# Working notes and agent instructions, kept locally
+HANDOVER.md
+CLAUDE.md
+AGENTS.md
+BRIEF.md
+STORYBOARD.md
+storyboard.html
+.media/
+# Unused library sound effects
+assets/sfx/
